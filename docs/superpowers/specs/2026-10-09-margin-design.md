@@ -1,10 +1,31 @@
 # Margin — Design Spec
 
 **Date:** 2026-10-09
-**Status:** Draft, awaiting review
+**Status:** Draft v2 (agent-centric platform), awaiting review
 
 ## Purpose
-Margin is a native macOS app that replaces IntelliJ IDEA for a workflow where AI agents write most of the code. The human's job is to **browse** code and **review agent changes**, not to type most of it. Margin is read-first, review-first, and deliberately not a full IDE.
+Margin is the foundation of an **agent-centric coding platform** for macOS. It starts from scratch with IntelliJ's core capabilities (navigation, search, syntax, git, change review) and builds them as a **headless engine**. Two kinds of client use that engine on equal terms:
+- **Humans**, through a native Mac app that is read-first and review-first.
+- **Agents**, through an MCP server, so they get IDE-grade navigation and diffs instead of grep.
+
+v1 ("engine first") ships the engine, the Mac app and a minimal MCP server. Agent orchestration (launching and managing agents per task) is phase 2 and is built on top of the same engine.
+
+## Architecture
+```
+            ┌──────────────┐      ┌──────────────────┐
+  human ──▶ │  Margin.app  │      │  margin-mcp      │ ◀── agents (Claude Code, …)
+            │ (SwiftUI)    │      │  (stdio MCP)     │
+            └──────┬───────┘      └────────┬─────────┘
+                   └────────┬──────────────┘
+                     ┌──────▼──────┐
+                     │ MarginCore  │  engine: Workspace · Search · LSP · Git · Review
+                     └─────────────┘
+          (phase 2: MarginAgents: task → worktree → agent session → review → merge)
+```
+Rules:
+- **MarginCore has no UI dependency.** Everything the app can do (except rendering) is a public, async, `Sendable` API on the core.
+- **Clients are thin.** The app and the MCP server only translate between the core API and their medium. No feature logic lives in a client.
+- **The disk and git are the single source of truth**, so a human and an agent working on the same repo always see the same state.
 
 ## Scope
 **In:** Java and Python syntax highlighting and formatting; navigation (go-to-definition, find usages, search everywhere, symbol search); agent change review; git tooling; light editing.
@@ -12,7 +33,8 @@ Margin is a native macOS app that replaces IntelliJ IDEA for a workflow where AI
 
 ## Platform & stack
 - macOS 14+, Swift 6, SwiftUI app shell with AppKit where SwiftUI falls short (code view, diff view).
-- Organized as a local Swift package with one target per module (`MarginWorkspace`, `MarginSearch`, `MarginEditor`, `MarginLSP`, `MarginGit`, `MarginReview`) plus a thin app target.
+- Organized as a local Swift package. Engine targets are `MarginWorkspace`, `MarginSearch`, `MarginLSP`, `MarginGit` and `MarginReview`, re-exported together as `MarginCore`. Client targets are `MarginEditor`, the app target and the `margin-mcp` executable.
+- The MCP server uses the official MCP Swift SDK (`modelcontextprotocol/swift-sdk`) over stdio.
 - Reused building blocks:
   - **CodeEditSourceEditor** + **SwiftTreeSitter** (MIT) for the code view and tree-sitter highlighting (java, python grammars).
   - **jdtls** (Java) and **basedpyright** (Python) language servers via a small JSON-RPC/stdio LSP client.
@@ -48,6 +70,9 @@ Typed wrappers over the git CLI: status, diff (worktree vs HEAD; branch vs merge
 - **Actions:** revert a hunk or file (`git apply -R` on that hunk, or checkout for the whole file), accept a hunk or file (stage it), and commit from the panel.
 - **Timeline** lists files touched during the session, most recent first, so you can follow what an agent is doing.
 
+### margin-mcp (agent client)
+A stdio MCP server that opens a workspace through MarginCore. It exposes read-only tools first: `find_file`, `search_text`, `find_symbol`, `go_to_definition`, `find_references`, `hover`, `document_symbols`, `diagnostics`, `git_status`, `git_diff`, `blame` and `file_history`. Results use repo-relative paths with line numbers and are paged so they fit in an agent's context. Write tools (stage, revert, commit) wait until phase 2, when they come with permission controls.
+
 ## Data flow
 FSEvents → Workspace (debounce ~200 ms) → events → {Review refreshes git status/diff; Editor reloads clean open buffers and flags dirty ones as conflicted; LSP sends didChange for open files}.
 User action (e.g. revert hunk) → Git → disk change → the same event path updates every view. Nothing updates the UI optimistically; the disk is the single source of truth.
@@ -68,5 +93,9 @@ User action (e.g. revert hunk) → Git → disk change → the same event path u
 1. **M1 Browser:** shell, open repo, file tree, tabs, highlighting, file finder, text search.
 2. **M2 Agent review:** git status, changes panel, diff view, revert/stage hunk, live refresh, worktree switcher. *(M1 + M2 is the first usable cut.)*
 3. **M3 Navigation:** LSP client, jdtls and basedpyright, go-to-definition, usages, symbols, hover.
+3b. **M3b margin-mcp:** read-only MCP server over MarginCore. Verified by registering it with Claude Code and having an agent navigate a Java repo with it.
 4. **M4 Git tooling:** log, file history, blame gutter, branches, commit dialog.
 5. **M5 Polish:** formatters, IntelliJ-like keymap, settings, editing quality.
+
+## Phase 2 (outline, separate spec later)
+**MarginAgents:** create a task, which gets its own git worktree, then start an agent (Claude Agent SDK / Claude Code) in it, stream the session live in the app, review the changes with MarginReview, and merge. This phase also adds write tools in margin-mcp, with permission controls.
