@@ -1,62 +1,50 @@
 import Foundation
 import MarginCore
+import MarginWorkspace
 
+/// Thin observable wrapper around the engine's `TextDocument` save/conflict state machine.
 @MainActor
 final class EditorDocument: ObservableObject, Identifiable {
     /// Repo-relative path.
     let id: String
-    let url: URL
     let language: SourceLanguage?
-    @Published var text: String
-    @Published private(set) var savedText: String
-    /// The file changed on disk while this document had unsaved edits.
-    @Published private(set) var changedOnDisk = false
+    @Published private var model: TextDocument
     /// A line to reveal next time the editor updates (1-based).
     @Published var pendingLine: Int?
 
     init(root: URL, path: String) throws {
         id = path
-        url = root.appendingPathComponent(path)
         language = SourceLanguage.detect(path: path)
-        let content = try String(contentsOf: url, encoding: .utf8)
-        text = content
-        savedText = content
+        model = try TextDocument(url: root.appendingPathComponent(path))
     }
 
-    var name: String { url.lastPathComponent }
-    var isDirty: Bool { text != savedText }
+    var url: URL { model.url }
+    var name: String { model.url.lastPathComponent }
+    var isDirty: Bool { model.isDirty }
+    var conflict: TextDocument.Conflict? { model.conflict }
 
-    func save() throws {
-        try text.write(to: url, atomically: true, encoding: .utf8)
-        savedText = text
-        changedOnDisk = false
+    var text: String {
+        get { model.text }
+        set { if newValue != model.text { model.text = newValue } }
     }
 
-    func saveIfSafe(report: (Error) -> Void) {
-        guard isDirty, !changedOnDisk else { return }
-        do { try save() } catch { report(error) }
+    func save() throws { try model.save() }
+
+    /// Saves unless that would clobber a disk change. Returns true if the document is clean afterwards.
+    @discardableResult
+    func saveIfSafe(report: (Error) -> Void) -> Bool {
+        do { return try model.saveIfSafe() } catch {
+            report(error)
+            return false
+        }
     }
 
     /// Called when the file changed on disk (e.g. an agent edited it).
-    func diskChanged() {
-        guard let disk = try? String(contentsOf: url, encoding: .utf8), disk != savedText else { return }
-        if isDirty {
-            changedOnDisk = true
-        } else {
-            text = disk
-            savedText = disk
-        }
+    func diskChanged() { model.diskChanged() }
+
+    func reloadFromDisk(report: (Error) -> Void) {
+        do { try model.reloadFromDisk() } catch { report(error) }
     }
 
-    func reloadFromDisk() {
-        if let disk = try? String(contentsOf: url, encoding: .utf8) {
-            text = disk
-            savedText = disk
-        }
-        changedOnDisk = false
-    }
-
-    func keepMine() {
-        changedOnDisk = false
-    }
+    func keepMine() { model.keepMine() }
 }

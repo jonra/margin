@@ -11,6 +11,7 @@ struct MarginApp: App {
             RootView()
                 .environmentObject(app)
                 .frame(minWidth: 900, minHeight: 600)
+                .onAppear { delegate.appState = app }
                 .task { await app.openFromCommandLine() }
         }
         .commands {
@@ -37,6 +38,7 @@ extension Notification.Name {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastShiftRelease: TimeInterval = 0
     private var shiftWasDown = false
+    weak var appState: AppState?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Needed when running the bare executable (swift run) instead of the .app bundle.
@@ -47,6 +49,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.trackShift(event)
             return event
         }
+        // Any other key between the Shift taps cancels the double-Shift gesture.
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            self?.lastShiftRelease = 0
+            self?.shiftWasDown = false
+            return event
+        }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let appState else { return .terminateNow }
+        MainActor.assumeIsolated { appState.saveAll() }
+        guard MainActor.assumeIsolated({ appState.hasUnsavedChanges }) else { return .terminateNow }
+        let alert = NSAlert()
+        alert.messageText = "You have unsaved changes that conflict with files on disk"
+        alert.informativeText = "Quitting now will discard those edits."
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Quit Anyway")
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

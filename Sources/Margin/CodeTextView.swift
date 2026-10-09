@@ -33,6 +33,7 @@ struct CodeTextView: NSViewRepresentable {
             // The document was reloaded from disk.
             let selection = textView.selectedRange()
             textView.string = document.text
+            textView.undoManager?.removeAllActions()
             textView.setSelectedRange(NSRange(location: min(selection.location, (document.text as NSString).length), length: 0))
             coordinator.highlight()
         }

@@ -52,6 +52,11 @@ final class AppState: ObservableObject {
 
     func open(_ url: URL) async {
         saveAll()
+        if let blocked = documents.first(where: { $0.isDirty }) {
+            activeDocumentID = blocked.id
+            errorMessage = "\(blocked.name) has unsaved changes that conflict with the file on disk. Resolve them (Keep Mine / Load Disk Version) before opening another folder."
+            return
+        }
         let opened = await Workspace.open(url)
         workspace = opened
         documents = []
@@ -98,6 +103,7 @@ final class AppState: ObservableObject {
     // MARK: Documents
 
     func openFile(_ path: String, line: Int? = nil) {
+        if activeDocumentID != path { saveAll() }
         if let existing = documents.first(where: { $0.id == path }) {
             existing.pendingLine = line
             activeDocumentID = path
@@ -116,6 +122,11 @@ final class AppState: ObservableObject {
 
     func close(_ document: EditorDocument) {
         document.saveIfSafe(report: report)
+        if document.isDirty {
+            activeDocumentID = document.id
+            errorMessage = "\(document.name) has unsaved changes that could not be saved. Resolve them (Keep Mine / Load Disk Version) before closing it."
+            return
+        }
         documents.removeAll { $0.id == document.id }
         if activeDocumentID == document.id { activeDocumentID = documents.last?.id }
     }
@@ -124,6 +135,8 @@ final class AppState: ObservableObject {
     func saveAll() {
         for document in documents { document.saveIfSafe(report: report) }
     }
+
+    var hasUnsavedChanges: Bool { documents.contains { $0.isDirty } }
 
     func report(_ error: Error) {
         errorMessage = String(describing: error)

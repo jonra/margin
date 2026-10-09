@@ -61,16 +61,21 @@ private struct TabButton: View {
 }
 
 private struct EditorPane: View {
+    @EnvironmentObject var app: AppState
     @ObservedObject var document: EditorDocument
 
     var body: some View {
         VStack(spacing: 0) {
-            if document.changedOnDisk {
+            if let conflict = document.conflict {
                 HStack {
                     Image(systemName: "exclamationmark.triangle")
-                    Text("\(document.name) changed on disk while you were editing it.")
+                    Text(conflict == .deletedOnDisk
+                        ? "\(document.name) was deleted on disk."
+                        : "\(document.name) changed on disk while you were editing it.")
                     Spacer()
-                    Button("Load Disk Version") { document.reloadFromDisk() }
+                    if conflict == .modifiedOnDisk {
+                        Button("Load Disk Version") { document.reloadFromDisk(report: app.report) }
+                    }
                     Button("Keep Mine") { document.keepMine() }
                 }
                 .padding(8)
