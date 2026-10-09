@@ -161,3 +161,32 @@ private func editTwoHunks(_ repo: TestRepo) throws {
     for file in try await engine.changes() { try await engine.revert(file) }
     #expect(try await engine.changes().isEmpty)
 }
+
+private let twoBlocks = "s1\ns2\ns3\nverify\nt1\nt2\nt3\n---\n---\ns1\ns2\ns3\nt1\nt2\nt3\n"
+
+@Test func revertHunkDoesNotStageDeletionAtOtherOffset() async throws {
+    let repo = try await TestRepo(files: ["t.swift": twoBlocks])
+    let edited = "s1\ns2\ns3\nverify\nt1\nt2\nt3\n---\n---\ns1\ns2\ns3\nverify\nt1\nt2\nt3\n"
+    try repo.write(["t.swift": edited])
+    let engine = try ReviewEngine(target: .workingTree(root: repo.root))
+    let file = try await engine.changes()[0]
+    try await engine.revert(file.diff.hunks[0], in: file)
+    #expect(try await repo.git("diff", "--cached").isEmpty)
+    #expect(try repo.read("t.swift") == twoBlocks)
+}
+
+@Test func revertHunkWithOtherStagedChangesThrowsAndLeavesIndex() async throws {
+    let repo = try await TestRepo(files: ["f.txt": thirtyLines])
+    var lines = thirtyLines.components(separatedBy: "\n")
+    lines[1] = "STAGED OLD"
+    try repo.write(["f.txt": lines.joined(separator: "\n")])
+    try await repo.git("add", "f.txt")
+    lines[1] = "CHANGED 2"
+    try repo.write(["f.txt": lines.joined(separator: "\n")])
+    let engine = try ReviewEngine(target: .workingTree(root: repo.root))
+    let file = try await engine.changes()[0]
+    let stagedBefore = try await repo.git("diff", "--cached")
+    await #expect(throws: ReviewError.self) { try await engine.revert(file.diff.hunks[0], in: file) }
+    #expect(try await repo.git("diff", "--cached") == stagedBefore)
+    #expect(try repo.read("f.txt") == thirtyLines)
+}

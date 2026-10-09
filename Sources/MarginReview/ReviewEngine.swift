@@ -55,11 +55,18 @@ public struct ReviewEngine: Sendable {
 
     public func revert(_ hunk: Hunk, in file: ChangedFile) async throws {
         try requireText(file)
-        let patch = file.diff.patch(only: hunk)
-        try await git.apply(patch: patch, reverse: true)
-        if target.allowsStaging {
-            // Also drop the hunk from the index if it was staged; it is fine if it was not.
-            do { try await git.apply(patch: patch, reverse: true, cached: true) } catch {}
+        try await git.apply(patch: file.diff.patch(only: hunk), reverse: true)
+        guard target.allowsStaging else { return }
+        // Drop the same change from the index, but only via a patch derived from the index itself:
+        // the worktree-derived patch could match a different location there.
+        func changedLines(_ h: Hunk) -> [String] { h.lines.filter { $0.kind == .added || $0.kind == .removed }.map(\.raw) }
+        let wanted = changedLines(hunk)
+        let staged = try await git.diffStaged(path: file.path).first { $0.path == file.path }
+        guard let staged, !staged.hunks.isEmpty else { return }
+        if let match = staged.hunks.first(where: { changedLines($0) == wanted }) {
+            try await git.apply(patch: staged.patch(only: match), reverse: true, cached: true)
+        } else {
+            throw ReviewError(description: "\(file.path): the hunk was reverted in the working tree, but the file has other staged changes that do not match it, so the index was left untouched. Unstage or review the staged changes with git.")
         }
     }
 

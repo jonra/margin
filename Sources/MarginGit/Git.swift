@@ -58,6 +58,14 @@ public struct Git: Sendable {
         return diffs.sorted { $0.path < $1.path }
     }
 
+    /// Staged changes (index vs HEAD) of one path; empty when nothing is staged for it.
+    public func diffStaged(path: String) async throws -> [FileDiff] {
+        let base = try await headCommit() != nil ? [] : [Git.emptyTree]
+        return DiffParser.parse(try await run(
+            ["diff", "--cached", "--no-color", "--no-ext-diff", "--no-renames", "--no-textconv",
+             "--src-prefix=a/", "--dst-prefix=b/"] + base + ["--", path], readOnly: true))
+    }
+
     /// File contents at a revision, or nil if the file does not exist there.
     public func show(path: String, revision: String) async throws -> String? {
         let result = try await ProcessRunner.run(executable, readOnlyPrefix + ["show", "\(revision):\(path)"])

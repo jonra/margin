@@ -135,7 +135,7 @@ struct DiffView: View {
         if line.kind == .noNewline { return AttributedString(line.raw) }
         // Use highlighted full-file lines only when they match the hunk's text (the file may have changed since).
         if let number, lines.indices.contains(number - 1),
-           String(lines[number - 1].characters) == line.text { return lines[number - 1] }
+           String(lines[number - 1].characters) == (line.text.hasSuffix("\r") ? String(line.text.dropLast()) : line.text) { return lines[number - 1] }
         return AttributedString(line.text)
     }
 
