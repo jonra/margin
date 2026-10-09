@@ -37,9 +37,7 @@ struct DiffView: View {
             }
         }
         .task(id: file.diff) {
-            // Never show highlighting that belongs to a previous file/diff.
-            oldLines = []
-            newLines = []
+            // DiffView has per-file identity (.id(file.id)), so keep current lines until the new ones are ready.
             let contents = await review.contents(of: file)
             guard !Task.isCancelled else { return }
             oldLines = Theme.highlightedLines(contents.old, path: file.path)

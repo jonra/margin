@@ -93,14 +93,9 @@ final class ReviewModel: ObservableObject {
             for await batch in watcher.events {
                 guard let self else { return }
                 let nested = self.nestedPrefixes
-                let root = self.target?.root
-                let own = batch.filter { path in
-                    guard !nested.contains(where: { path.hasPrefix($0) }) else { return false }
-                    // Drop paths that no longer exist (editor temp files renamed away); .git internals pass through for the timeline to ignore.
-                    guard let root else { return true }
-                    return FileManager.default.fileExists(atPath: root.appendingPathComponent(path).path)
-                }
+                let own = batch.filter { path in !nested.contains(where: { path.hasPrefix($0) }) }
                 guard !own.isEmpty else { continue }
+                // Deleted files stay in the timeline; editor temp files are dropped by ChangeTimeline itself.
                 self.timeline.record(own)
                 self.isLive = self.timeline.isLive()
                 self.scheduleRefresh()
