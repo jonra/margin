@@ -10,6 +10,10 @@ func grammar(_ name: String) -> Target {
 let package = Package(
     name: "Margin",
     platforms: [.macOS(.v14)],
+    products: [
+        .library(name: "MarginCore", targets: ["MarginCore"]),
+        .executable(name: "Margin", targets: ["Margin"]),
+    ],
     dependencies: [
         .package(url: "https://github.com/ChimeHQ/SwiftTreeSitter", exact: "0.25.0"),
     ],
@@ -25,6 +29,10 @@ let package = Package(
         .target(name: "MarginWorkspace", dependencies: ["MarginSupport", "MarginGit"]),
         .target(name: "MarginSearch", dependencies: ["MarginSupport"]),
         .target(name: "MarginReview", dependencies: ["MarginGit"]),
+        .target(name: "MarginCore", dependencies: [
+            "MarginSupport", "MarginSyntax", "MarginGit", "MarginWorkspace", "MarginSearch", "MarginReview",
+        ]),
+        .executableTarget(name: "Margin", dependencies: ["MarginCore"]),
         .target(name: "MarginTestSupport", dependencies: ["MarginSupport"], path: "Tests/MarginTestSupport"),
         .testTarget(name: "MarginSupportTests", dependencies: ["MarginSupport"]),
         .testTarget(name: "MarginSyntaxTests", dependencies: ["MarginSyntax"]),
