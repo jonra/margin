@@ -1,5 +1,7 @@
 # Margin
 
+[![Build](https://github.com/jonra/margin/actions/workflows/build.yml/badge.svg)](https://github.com/jonra/margin/actions/workflows/build.yml)
+
 **A native macOS code browser and agent-change reviewer.** Agents write the code. Margin is where you read it, follow what they are doing, and decide what stays.
 
 Margin borrows the core of IntelliJ IDEA (project tree, fast navigation, search, git, diffs) and rebuilds it from scratch around one workflow: AI agents edit files on disk while you browse and review. It is the foundation of an agent-centric coding platform. Its engine (`MarginCore`) is headless, so the Mac app and, later, agents (through an MCP server) can both use it.
@@ -25,7 +27,19 @@ Margin borrows the core of IntelliJ IDEA (project tree, fast navigation, search,
 - **Never overwrites a file that changed on disk since you loaded it.** A banner offers *Load Disk Version*, *Keep Mine* or *Discard My Changes*.
 - Quitting with unresolved conflicts asks for confirmation first
 
-## Requirements
+## Download
+
+**[⬇ Download Margin.dmg (latest build)](https://github.com/jonra/margin/releases/download/latest/Margin.dmg)**: requires a Mac with **Apple silicon (M1 or later)** and **macOS 14+**.
+
+Every push to `main` that passes all tests publishes a fresh DMG to the [latest release](https://github.com/jonra/margin/releases/tag/latest). Tagged versions (`v*`) are published as their own [releases](https://github.com/jonra/margin/releases).
+
+1. Open `Margin.dmg` and drag **Margin** to **Applications**.
+2. Install ripgrep for Find in Files: `brew install ripgrep`.
+3. Launch Margin and open a folder (⌘O).
+
+> Until builds are notarized by Apple, macOS blocks the first launch ("Apple could not verify…"). Open **System Settings › Privacy & Security** and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Margin.app`. See [docs/RELEASING.md](docs/RELEASING.md).
+
+## Requirements (building from source)
 
 - macOS 14 or later
 - Swift 6 toolchain. The Xcode **Command Line Tools are enough**; Xcode itself is not required.
