@@ -23,11 +23,13 @@ let package = Package(
         ]),
         .target(name: "MarginGit", dependencies: ["MarginSupport"]),
         .target(name: "MarginWorkspace", dependencies: ["MarginSupport", "MarginGit"]),
+        .target(name: "MarginSearch", dependencies: ["MarginSupport"]),
         .target(name: "MarginTestSupport", dependencies: ["MarginSupport"], path: "Tests/MarginTestSupport"),
         .testTarget(name: "MarginSupportTests", dependencies: ["MarginSupport"]),
         .testTarget(name: "MarginSyntaxTests", dependencies: ["MarginSyntax"]),
         .testTarget(name: "MarginGitTests", dependencies: ["MarginGit", "MarginTestSupport"]),
         .testTarget(name: "MarginWorkspaceTests", dependencies: ["MarginWorkspace", "MarginTestSupport"]),
+        .testTarget(name: "MarginSearchTests", dependencies: ["MarginSearch", "MarginTestSupport"]),
     ],
     swiftLanguageModes: [.v5]
 )
