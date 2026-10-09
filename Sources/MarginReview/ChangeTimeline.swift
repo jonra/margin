@@ -14,9 +14,15 @@ public struct ChangeTimeline: Sendable {
 
     public init() {}
 
-    /// Records changed paths. Paths inside `.git/` are ignored.
+    /// Editor scratch files (`.!123!A.java` from sed -i, `A.java~`, `.swp`, `.tmp`) are not real changes.
+    public static func isTemporary(_ path: String) -> Bool {
+        let name = path.split(separator: "/").last.map(String.init) ?? path
+        return name.hasPrefix(".!") || name.hasSuffix("~") || name.hasSuffix(".swp") || name.hasSuffix(".tmp")
+    }
+
+    /// Records changed paths. Paths inside `.git/` and editor temp files are ignored.
     public mutating func record(_ paths: [String], at date: Date = Date()) {
-        let relevant = paths.filter { !$0.hasPrefix(".git/") && $0 != ".git" }
+        let relevant = paths.filter { !$0.hasPrefix(".git/") && $0 != ".git" && !Self.isTemporary($0) }
         guard !relevant.isEmpty else { return }
         let touched = Set(relevant)
         entries.removeAll { touched.contains($0.path) }

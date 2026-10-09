@@ -26,6 +26,7 @@ struct RootView: View {
                 } detail: {
                     if app.sidebarMode == .changes, let file = review.selectedFile {
                         DiffView(file: file)
+                            .id(file.id)
                     } else {
                         EditorArea()
                     }

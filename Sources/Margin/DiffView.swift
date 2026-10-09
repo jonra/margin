@@ -21,9 +21,13 @@ struct DiffView: View {
                         ForEach(file.diff.hunks) { hunk in
                             hunkHeader(hunk)
                             if review.inlineMode {
-                                ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in inlineRow(line) }
+                                ForEach(Array(hunk.lines.enumerated()), id: \.offset) { offset, line in
+                                    inlineRow(line).id("\(file.id)|\(hunk.id)|i\(offset)")
+                                }
                             } else {
-                                ForEach(Array(SideBySide.rows(for: hunk).enumerated()), id: \.offset) { _, row in sideBySideRow(row) }
+                                ForEach(Array(SideBySide.rows(for: hunk).enumerated()), id: \.offset) { offset, row in
+                                    sideBySideRow(row).id("\(file.id)|\(hunk.id)|s\(offset)")
+                                }
                             }
                         }
                     }
@@ -33,7 +37,11 @@ struct DiffView: View {
             }
         }
         .task(id: file.diff) {
+            // Never show highlighting that belongs to a previous file/diff.
+            oldLines = []
+            newLines = []
             let contents = await review.contents(of: file)
+            guard !Task.isCancelled else { return }
             oldLines = Theme.highlightedLines(contents.old, path: file.path)
             newLines = Theme.highlightedLines(contents.new, path: file.path)
         }

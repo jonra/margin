@@ -24,7 +24,9 @@ final class ReviewModel: ObservableObject {
     private var liveTimer: Timer?
 
     var selectedFile: ChangedFile? { changes.first { $0.id == selectedFileID } }
-    private var engine: ReviewEngine? { target.flatMap { try? ReviewEngine(target: $0) } }
+    private var engine: ReviewEngine?
+    /// Paths (relative to the current target) of other worktrees nested inside it; kept current as `targets` changes.
+    private var nestedPrefixes: [String] = []
 
     init() {
         liveTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -41,9 +43,10 @@ final class ReviewModel: ObservableObject {
         changes = []
         selectedFileID = nil
         timeline = ChangeTimeline()
+        // Force didSet to fire even when reopening the same folder, so watching restarts.
+        target = nil
         guard workspace.isGitRepository else {
             targets = []
-            target = nil
             return
         }
         await reloadTargets()
@@ -59,6 +62,7 @@ final class ReviewModel: ObservableObject {
         do {
             let all = ReviewTarget.all(from: try await Git(root: root).worktrees())
             targets = all
+            updateNestedPrefixes()
             if let current = target, all.contains(current) { return }
             target = all.first { $0.root.path == root.path } ?? all.first
         } catch {
@@ -72,27 +76,45 @@ final class ReviewModel: ObservableObject {
         targetWatchTask?.cancel()
         targetWatcher?.stop()
         targetWatcher = nil
+        engine = nil
         guard let target else {
             changes = []
             return
         }
-        // Paths of other worktrees nested inside this one (e.g. .claude/worktrees/x) are not ours.
-        let nested = targets.compactMap { other -> String? in
-            let prefix = target.root.path + "/"
-            return other != target && other.root.path.hasPrefix(prefix) ? String(other.root.path.dropFirst(prefix.count)) + "/" : nil
+        do { engine = try ReviewEngine(target: target) } catch {
+            changes = []
+            onError(error)
+            return
         }
+        updateNestedPrefixes()
         let watcher = FileWatcher(root: target.root)
         targetWatcher = watcher
         targetWatchTask = Task { [weak self] in
             for await batch in watcher.events {
-                let own = batch.filter { path in !nested.contains { path.hasPrefix($0) } }
+                guard let self else { return }
+                let nested = self.nestedPrefixes
+                let root = self.target?.root
+                let own = batch.filter { path in
+                    guard !nested.contains(where: { path.hasPrefix($0) }) else { return false }
+                    // Drop paths that no longer exist (editor temp files renamed away); .git internals pass through for the timeline to ignore.
+                    guard let root else { return true }
+                    return FileManager.default.fileExists(atPath: root.appendingPathComponent(path).path)
+                }
                 guard !own.isEmpty else { continue }
-                self?.timeline.record(own)
-                self?.isLive = self?.timeline.isLive() ?? false
-                self?.scheduleRefresh()
+                self.timeline.record(own)
+                self.isLive = self.timeline.isLive()
+                self.scheduleRefresh()
             }
         }
         scheduleRefresh()
+    }
+
+    private func updateNestedPrefixes() {
+        guard let target else { nestedPrefixes = []; return }
+        let prefix = target.root.path + "/"
+        nestedPrefixes = targets.compactMap { other in
+            other != target && other.root.path.hasPrefix(prefix) ? String(other.root.path.dropFirst(prefix.count)) + "/" : nil
+        }
     }
 
     func scheduleRefresh() {
@@ -111,6 +133,8 @@ final class ReviewModel: ObservableObject {
         }
         do {
             let latest = try await engine.changes()
+            // The target may have been switched while git was running; drop stale results.
+            guard engine.target == target else { return }
             if latest != changes { changes = latest }
         } catch {
             onError(error)
@@ -119,7 +143,10 @@ final class ReviewModel: ObservableObject {
 
     func contents(of file: ChangedFile) async -> (old: String?, new: String?) {
         guard let engine else { return (nil, nil) }
-        do { return try await engine.contents(of: file) } catch {
+        do {
+            let result = try await engine.contents(of: file)
+            return engine.target == target ? result : (nil, nil)
+        } catch {
             onError(error)
             return (nil, nil)
         }

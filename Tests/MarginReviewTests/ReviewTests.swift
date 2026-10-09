@@ -122,3 +122,9 @@ private func editTwoHunks(_ repo: TestRepo) throws {
     #expect(timeline.isLive(now: t0.addingTimeInterval(4)))
     #expect(!timeline.isLive(now: t0.addingTimeInterval(10)))
 }
+
+@Test func timelineIgnoresEditorTempFiles() {
+    var timeline = ChangeTimeline()
+    timeline.record(["src/.!34533!A.java", "src/A.java~", "src/.A.java.swp", "build.tmp", "src/A.java"])
+    #expect(timeline.entries.map(\.path) == ["src/A.java"])
+}
