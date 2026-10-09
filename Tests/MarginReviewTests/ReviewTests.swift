@@ -128,3 +128,36 @@ private func editTwoHunks(_ repo: TestRepo) throws {
     timeline.record(["src/.!34533!A.java", "src/A.java~", "src/.A.java.swp", "build.tmp", "src/A.java"])
     #expect(timeline.entries.map(\.path) == ["src/A.java"])
 }
+
+@Test func revertHunkAlsoDropsItFromIndex() async throws {
+    let repo = try await TestRepo(files: ["f.txt": thirtyLines])
+    try editTwoHunks(repo)
+    try await repo.git("add", "f.txt")
+    let engine = try ReviewEngine(target: .workingTree(root: repo.root))
+    let file = try await engine.changes()[0]
+    #expect(file.diff.hunks.count == 2)
+    try await engine.revert(file.diff.hunks[0], in: file)
+    let cached = try await repo.git("diff", "--cached")
+    #expect(!cached.contains("CHANGED 2\n") && cached.contains("CHANGED 28"))
+    #expect(try await engine.changes()[0].diff.hunks.count == 1)
+}
+
+@Test func revertOnlyHunkOfStagedNewFileLeavesNoHiddenEntry() async throws {
+    let repo = try await TestRepo(files: ["a.txt": "a\n"])
+    try repo.write(["n.py": "print(1)\n"])
+    try await repo.git("add", "n.py")
+    let engine = try ReviewEngine(target: .workingTree(root: repo.root))
+    let file = try await engine.changes().first { $0.path == "n.py" }!
+    try await engine.revert(file.diff.hunks[0], in: file)
+    #expect(try await repo.git("status", "--porcelain").trimmingCharacters(in: .whitespacesAndNewlines) == "")
+}
+
+@Test func revertWorksForPathsWithSpaces() async throws {
+    let repo = try await TestRepo(files: ["my f.txt": thirtyLines])
+    var lines = thirtyLines.components(separatedBy: "\n")
+    lines[1] = "CHANGED 2"
+    try repo.write(["my f.txt": lines.joined(separator: "\n"), "new f.py": "x\n"])
+    let engine = try ReviewEngine(target: .workingTree(root: repo.root))
+    for file in try await engine.changes() { try await engine.revert(file) }
+    #expect(try await engine.changes().isEmpty)
+}

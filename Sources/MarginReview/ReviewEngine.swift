@@ -55,7 +55,12 @@ public struct ReviewEngine: Sendable {
 
     public func revert(_ hunk: Hunk, in file: ChangedFile) async throws {
         try requireText(file)
-        try await git.apply(patch: file.diff.patch(only: hunk), reverse: true)
+        let patch = file.diff.patch(only: hunk)
+        try await git.apply(patch: patch, reverse: true)
+        if target.allowsStaging {
+            // Also drop the hunk from the index if it was staged; it is fine if it was not.
+            do { try await git.apply(patch: patch, reverse: true, cached: true) } catch {}
+        }
     }
 
     public func revert(_ file: ChangedFile) async throws {
