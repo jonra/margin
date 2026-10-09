@@ -21,8 +21,10 @@ let package = Package(
             .product(name: "SwiftTreeSitter", package: "SwiftTreeSitter"),
             "TreeSitterJava", "TreeSitterPython",
         ]),
+        .target(name: "MarginGit", dependencies: ["MarginSupport"]),
         .testTarget(name: "MarginSupportTests", dependencies: ["MarginSupport"]),
         .testTarget(name: "MarginSyntaxTests", dependencies: ["MarginSyntax"]),
+        .testTarget(name: "MarginGitTests", dependencies: ["MarginGit"]),
     ],
     swiftLanguageModes: [.v5]
 )
