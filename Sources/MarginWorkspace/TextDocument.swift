@@ -9,6 +9,8 @@ public struct TextDocument {
     }
 
     public let url: URL
+    /// Saves go to the resolved path so a symlinked file stays a symlink.
+    private var resolvedURL: URL { url.resolvingSymlinksInPath() }
     public var text: String
     public private(set) var conflict: Conflict?
     /// What we believe is on disk; nil means the file is absent.
@@ -16,7 +18,7 @@ public struct TextDocument {
 
     public init(url: URL) throws {
         self.url = url
-        let content = try String(contentsOf: url, encoding: .utf8)
+        let content = try String(contentsOf: url.resolvingSymlinksInPath(), encoding: .utf8)
         text = content
         baseline = content
     }
@@ -25,7 +27,7 @@ public struct TextDocument {
 
     /// Unconditional write (explicit user intent). Clears any conflict.
     public mutating func save() throws {
-        try text.write(to: url, atomically: true, encoding: .utf8)
+        try text.write(to: resolvedURL, atomically: true, encoding: .utf8)
         baseline = text
         conflict = nil
     }
@@ -44,7 +46,10 @@ public struct TextDocument {
 
     /// Call when the file may have changed on disk.
     public mutating func diskChanged() {
-        guard let found = detectConflict() else { return }
+        guard let found = detectConflict() else {
+            conflict = nil // disk matches the baseline again (restored by git, etc.)
+            return
+        }
         if isDirty || conflict != nil || found == .deletedOnDisk {
             conflict = found
         } else if let disk = readDisk() {
@@ -53,8 +58,15 @@ public struct TextDocument {
         }
     }
 
+    /// Drops unsaved edits without touching the disk (e.g. closing a tab whose file was deleted).
+    public mutating func discardChanges() {
+        text = baseline ?? ""
+        baseline = text
+        conflict = nil
+    }
+
     public mutating func reloadFromDisk() throws {
-        let disk = try String(contentsOf: url, encoding: .utf8)
+        let disk = try String(contentsOf: resolvedURL, encoding: .utf8)
         text = disk
         baseline = disk
         conflict = nil
@@ -66,7 +78,7 @@ public struct TextDocument {
         conflict = nil
     }
 
-    private func readDisk() -> String? { try? String(contentsOf: url, encoding: .utf8) }
+    private func readDisk() -> String? { try? String(contentsOf: resolvedURL, encoding: .utf8) }
 
     private func detectConflict() -> Conflict? {
         let disk = readDisk()

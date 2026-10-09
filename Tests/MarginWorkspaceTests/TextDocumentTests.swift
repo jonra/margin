@@ -122,3 +122,41 @@ private func disk(_ url: URL) throws -> String { try String(contentsOf: url, enc
     try doc.save()
     #expect(try disk(url) == "mine" && doc.conflict == nil)
 }
+
+@Test func savingThroughSymlinkKeepsLinkAndWritesTarget() throws {
+    let url = try tempFile("one")
+    let dir = url.deletingLastPathComponent()
+    let target = dir.appendingPathComponent("target.py")
+    try "old".write(to: target, atomically: true, encoding: .utf8)
+    let link = dir.appendingPathComponent("link.py")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+    var doc = try TextDocument(url: link)
+    #expect(doc.text == "old")
+    doc.text = "new"
+    try doc.save()
+    #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: link.path)) != nil)
+    #expect(try disk(target) == "new")
+}
+
+@Test func conflictClearsWhenDiskMatchesBaselineAgain() throws {
+    let url = try tempFile("one")
+    var doc = try TextDocument(url: url)
+    doc.text = "mine"
+    try FileManager.default.removeItem(at: url)
+    doc.diskChanged()
+    #expect(doc.conflict == .deletedOnDisk)
+    try "one".write(to: url, atomically: true, encoding: .utf8)
+    doc.diskChanged()
+    #expect(doc.conflict == nil && doc.text == "mine" && doc.isDirty)
+}
+
+@Test func discardChangesMakesDeletedDirtyDocumentCleanWithoutWriting() throws {
+    let url = try tempFile("one")
+    var doc = try TextDocument(url: url)
+    doc.text = "mine"
+    try FileManager.default.removeItem(at: url)
+    doc.diskChanged()
+    doc.discardChanges()
+    #expect(!doc.isDirty && doc.conflict == nil && doc.text == "one")
+    #expect(!FileManager.default.fileExists(atPath: url.path))
+}
