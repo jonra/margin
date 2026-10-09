@@ -47,4 +47,6 @@ final class EditorDocument: ObservableObject, Identifiable {
     }
 
     func keepMine() { model.keepMine() }
+
+    func discardChanges() { model.discardChanges() }
 }

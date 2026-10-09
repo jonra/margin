@@ -21,6 +21,8 @@ final class ReviewModel: ObservableObject {
     private var targetWatcher: FileWatcher?
     private var targetWatchTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
+    /// Bumped by every refresh; a result is applied only if no newer refresh started meanwhile.
+    private var refreshGeneration = 0
     private var liveTimer: Timer?
 
     var selectedFile: ChangedFile? { changes.first { $0.id == selectedFileID } }
@@ -126,10 +128,12 @@ final class ReviewModel: ObservableObject {
             changes = []
             return
         }
+        refreshGeneration += 1
+        let generation = refreshGeneration
         do {
             let latest = try await engine.changes()
-            // The target may have been switched while git was running; drop stale results.
-            guard engine.target == target else { return }
+            // Drop results from a switched target or from a refresh that a newer one has superseded.
+            guard engine.target == target, generation == refreshGeneration else { return }
             if latest != changes { changes = latest }
         } catch {
             onError(error)

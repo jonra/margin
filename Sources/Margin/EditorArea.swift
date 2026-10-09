@@ -76,6 +76,12 @@ private struct EditorPane: View {
                     if conflict == .modifiedOnDisk {
                         Button("Load Disk Version") { document.reloadFromDisk(report: app.report) }
                     }
+                    if conflict == .deletedOnDisk {
+                        Button("Discard My Changes") {
+                            document.discardChanges()
+                            app.close(document)
+                        }
+                    }
                     Button("Keep Mine") { document.keepMine() }
                 }
                 .padding(8)

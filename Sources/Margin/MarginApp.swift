@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var appState: AppState?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        signal(SIGPIPE, SIG_IGN)
         // Needed when running the bare executable (swift run) instead of the .app bundle.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)

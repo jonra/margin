@@ -7,6 +7,7 @@ struct DiffView: View {
     @State private var oldLines: [AttributedString] = []
     @State private var newLines: [AttributedString] = []
     @State private var confirmRevert = false
+    @State private var hunkToRevert: Hunk?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,6 +49,15 @@ struct DiffView: View {
         } message: {
             Text("This discards the changes on disk and cannot be undone.")
         }
+        .confirmationDialog(
+            "Revert the only changes to new file \(file.path)?",
+            isPresented: Binding(get: { hunkToRevert != nil }, set: { if !$0 { hunkToRevert = nil } }),
+            presenting: hunkToRevert
+        ) { hunk in
+            Button("Revert Hunk and Delete File", role: .destructive) { review.revert(hunk, in: file) }
+        } message: { _ in
+            Text("Reverting a hunk of a new file deletes it from disk and cannot be undone.")
+        }
     }
 
     private var header: some View {
@@ -77,7 +87,9 @@ struct DiffView: View {
             if review.target?.allowsStaging == true, !file.diff.isBinary {
                 Button("Stage Hunk") { review.stage(hunk, in: file) }.controlSize(.small)
             }
-            Button("Revert Hunk") { review.revert(hunk, in: file) }.controlSize(.small)
+            Button("Revert Hunk") {
+                if file.diff.isNewFile { hunkToRevert = hunk } else { review.revert(hunk, in: file) }
+            }.controlSize(.small)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -121,7 +133,9 @@ struct DiffView: View {
 
     private func content(_ line: DiffLine, number: Int?, lines: [AttributedString]) -> AttributedString {
         if line.kind == .noNewline { return AttributedString(line.raw) }
-        if let number, lines.indices.contains(number - 1) { return lines[number - 1] }
+        // Use highlighted full-file lines only when they match the hunk's text (the file may have changed since).
+        if let number, lines.indices.contains(number - 1),
+           String(lines[number - 1].characters) == line.text { return lines[number - 1] }
         return AttributedString(line.text)
     }
 
