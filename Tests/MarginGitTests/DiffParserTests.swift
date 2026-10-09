@@ -75,3 +75,9 @@ Binary files a/logo.png and b/logo.png differ
 
     """)
 }
+
+@Test func trailingTabAfterPathWithSpaceIsStripped() {
+    let text = "diff --git a/new file.py b/new file.py\nindex 1..2 100644\n--- a/new file.py\t\n+++ b/new file.py\t\n@@ -1 +1 @@\n-a\n+b\n"
+    let file = DiffParser.parse(text)[0]
+    #expect(file.oldPath == "new file.py" && file.newPath == "new file.py")
+}

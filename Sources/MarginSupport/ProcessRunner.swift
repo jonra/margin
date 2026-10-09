@@ -25,10 +25,14 @@ public struct ProcessError: Error, CustomStringConvertible, Sendable {
 
 /// Runs external tools (git, rg, …) off the main thread and collects their output.
 public enum ProcessRunner {
+    /// Writing to a child that exited early must surface EPIPE, not kill the process.
+    private static let ignoreSigpipe: Void = { signal(SIGPIPE, SIG_IGN) }()
+
     public static func run(
         _ executable: URL, _ arguments: [String], cwd: URL? = nil, stdin: Data? = nil
     ) async throws -> ProcessResult {
-        try await withCheckedThrowingContinuation { continuation in
+        _ = ignoreSigpipe
+        return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
                 process.executableURL = executable
@@ -47,7 +51,7 @@ public enum ProcessRunner {
                 }
                 if let inPipe, let stdin {
                     DispatchQueue.global().async {
-                        inPipe.fileHandleForWriting.write(stdin)
+                        do { try inPipe.fileHandleForWriting.write(contentsOf: stdin) } catch {}
                         try? inPipe.fileHandleForWriting.close()
                     }
                 }

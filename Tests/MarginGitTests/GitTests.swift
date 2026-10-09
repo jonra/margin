@@ -128,3 +128,47 @@ import MarginTestSupport
     try await git.commit(message: "update a")
     #expect(try await git.status().isEmpty)
 }
+
+@Test func pathsWithSpacesRoundTrip() async throws {
+    let repo = try await TestRepo(files: ["my file.py": "one\n"])
+    try repo.write(["my file.py": "two\n", "new file.py": "x\n"])
+    let git = try Git(root: repo.root)
+    let diffs = try await git.diffWorkingTree(against: "HEAD")
+    #expect(diffs.map(\.path) == ["my file.py", "new file.py"])
+    try await git.stage(paths: ["my file.py"])
+    #expect(try await git.show(path: "my file.py", revision: ":0") == "two\n")
+}
+
+@Test func diffIgnoresUserPrefixConfig() async throws {
+    let repo = try await TestRepo(files: ["a.txt": "one\n"])
+    try await repo.git("config", "diff.mnemonicPrefix", "true")
+    try await repo.git("config", "diff.noprefix", "true")
+    try repo.write(["a.txt": "two\n", "n.txt": "x\n"])
+    let git = try Git(root: repo.root)
+    let diffs = try await git.diffWorkingTree(against: "HEAD")
+    #expect(diffs.map(\.path) == ["a.txt", "n.txt"])
+    try await git.apply(patch: diffs[0].patch(), reverse: true)
+    #expect(try repo.read("a.txt") == "one\n")
+}
+
+@Test func emptyStageAndUnstageAreNoOps() async throws {
+    let repo = try await TestRepo(files: ["a.txt": "one\n"])
+    try repo.write(["a.txt": "two\n", "n.txt": "x\n"])
+    let git = try Git(root: repo.root)
+    try await git.stage(paths: [])
+    #expect(try await repo.git("diff", "--cached", "--name-only").isEmpty)
+    try await git.stage(paths: ["a.txt"])
+    try await git.unstage(paths: [])
+    #expect(try await repo.git("diff", "--cached", "--name-only") == "a.txt\n")
+}
+
+@Test func statusDoesNotTouchIndex() async throws {
+    let repo = try await TestRepo(files: ["a.txt": "one\n"])
+    let index = repo.url(".git/index")
+    func mtime() throws -> Date { try FileManager.default.attributesOfItem(atPath: index.path)[.modificationDate] as! Date }
+    let before = try mtime()
+    try await Task.sleep(for: .milliseconds(1100))
+    try "one\n".write(to: repo.url("a.txt"), atomically: false, encoding: .utf8) // touch, same content
+    _ = try await Git(root: repo.root).status()
+    #expect(try mtime() == before)
+}

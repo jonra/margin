@@ -36,3 +36,9 @@ import Testing
         try ToolLocator.require("definitely-not-a-tool-xyz", installHint: "brew install xyz")
     }
 }
+
+@Test func runSurvivesChildThatNeverReadsLargeStdin() async throws {
+    let big = Data(repeating: 0x41, count: 10_000_000)
+    let result = try await ProcessRunner.run(URL(fileURLWithPath: "/bin/sh"), ["-c", "exit 0"], stdin: big)
+    #expect(result.status == 0)
+}

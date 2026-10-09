@@ -111,7 +111,9 @@ public enum DiffParser {
         return files
     }
 
-    private static func patchPath(_ value: String) -> String? {
+    private static func patchPath(_ raw: String) -> String? {
+        // git appends a TAB after paths containing spaces.
+        let value = raw.hasSuffix("\t") ? String(raw.dropLast()) : raw
         if value == "/dev/null" { return nil }
         if value.hasPrefix("a/") || value.hasPrefix("b/") { return String(value.dropFirst(2)) }
         return value
