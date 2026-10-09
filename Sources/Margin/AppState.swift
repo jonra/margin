@@ -4,20 +4,28 @@ import SwiftUI
 
 @MainActor
 final class AppState: ObservableObject {
+    enum SidebarMode: String, CaseIterable, Identifiable {
+        case project = "Project", changes = "Changes"
+        var id: String { rawValue }
+    }
+
     @Published private(set) var workspace: Workspace?
     @Published private(set) var files: [String] = []
     @Published private(set) var tree: [FileNode] = []
     @Published private(set) var documents: [EditorDocument] = []
     @Published var activeDocumentID: String?
+    @Published var sidebarMode: SidebarMode = .project
     @Published var showQuickOpen = false
     @Published var showFindInFiles = false
     @Published var errorMessage: String?
 
+    let review = ReviewModel()
     private var fileSet: Set<String> = []
     private var watcher: FileWatcher?
     private var watchTask: Task<Void, Never>?
 
     init() {
+        review.onError = { [weak self] in self?.report($0) }
         NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -63,6 +71,7 @@ final class AppState: ObservableObject {
         activeDocumentID = nil
         await reloadFiles()
         startWatching(opened.root)
+        await review.load(workspace: opened)
     }
 
     private func reloadFiles() async {
@@ -98,6 +107,7 @@ final class AppState: ObservableObject {
         for document in documents where workingFiles.contains(document.id) {
             document.diskChanged()
         }
+        await review.workspaceChanged(paths)
     }
 
     // MARK: Documents

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var app: AppState
+    @EnvironmentObject private var review: ReviewModel
 
     var body: some View {
         Group {
@@ -9,10 +10,25 @@ struct RootView: View {
                 WelcomeView()
             } else {
                 NavigationSplitView {
-                    FileTreeView()
-                        .navigationSplitViewColumnWidth(min: 220, ideal: 300)
+                    VStack(spacing: 0) {
+                        Picker("Sidebar", selection: $app.sidebarMode) {
+                            ForEach(AppState.SidebarMode.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .padding(8)
+                        switch app.sidebarMode {
+                        case .project: FileTreeView()
+                        case .changes: ChangesView()
+                        }
+                    }
+                    .navigationSplitViewColumnWidth(min: 220, ideal: 300)
                 } detail: {
-                    EditorArea()
+                    if app.sidebarMode == .changes, let file = review.selectedFile {
+                        DiffView(file: file)
+                    } else {
+                        EditorArea()
+                    }
                 }
             }
         }

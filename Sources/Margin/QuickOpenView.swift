@@ -41,6 +41,7 @@ struct QuickOpenView: View {
     private func open(_ results: [String]) {
         guard results.indices.contains(selected) else { return }
         app.openFile(results[selected])
+        app.sidebarMode = .project
         dismiss()
     }
 }

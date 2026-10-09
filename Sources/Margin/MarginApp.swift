@@ -10,6 +10,7 @@ struct MarginApp: App {
         Window("Margin", id: "main") {
             RootView()
                 .environmentObject(app)
+                .environmentObject(app.review)
                 .frame(minWidth: 900, minHeight: 600)
                 .onAppear { delegate.appState = app }
                 .task { await app.openFromCommandLine() }
@@ -26,6 +27,9 @@ struct MarginApp: App {
                     .keyboardShortcut("o", modifiers: [.command, .shift])
                 Button("Find in Files…") { app.showFindInFiles = true }
                     .keyboardShortcut("f", modifiers: [.command, .shift])
+                Divider()
+                Button("Project") { app.sidebarMode = .project }.keyboardShortcut("1")
+                Button("Changes") { app.sidebarMode = .changes }.keyboardShortcut("0")
             }
         }
     }

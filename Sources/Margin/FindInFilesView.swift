@@ -33,6 +33,7 @@ struct FindInFilesView: View {
                 .contentShape(Rectangle())
                 .onTapGesture {
                     app.openFile(match.path, line: match.line)
+                    app.sidebarMode = .project
                     dismiss()
                 }
             }
