@@ -11,10 +11,12 @@ public final class FileWatcher: @unchecked Sendable {
     private let rootPath: String
     private var stream: FSEventStreamRef?
     private let queue = DispatchQueue(label: "margin.filewatcher")
+    private let queueKey = DispatchSpecificKey<Void>()
 
     public init(root: URL, latency: TimeInterval = 0.2) {
         self.root = root
         self.rootPath = root.path.resolvingRealPath()
+        queue.setSpecific(key: queueKey, value: ())
         (events, continuation) = AsyncStream.makeStream(of: [String].self, bufferingPolicy: .unbounded)
         start(latency: latency)
     }
@@ -22,14 +24,22 @@ public final class FileWatcher: @unchecked Sendable {
     deinit { stop() }
 
     public func stop() {
-        queue.sync {
-            guard let stream else { return }
-            FSEventStreamStop(stream)
-            FSEventStreamInvalidate(stream)
-            FSEventStreamRelease(stream)
-            self.stream = nil
+        // deinit can run on `queue` if the last reference is dropped inside a callback;
+        // queue.sync from the queue itself would trap, so tear down inline in that case.
+        if DispatchQueue.getSpecific(key: queueKey) != nil {
+            tearDownStream()
+        } else {
+            queue.sync { tearDownStream() }
         }
         continuation.finish()
+    }
+
+    private func tearDownStream() {
+        guard let stream else { return }
+        FSEventStreamStop(stream)
+        FSEventStreamInvalidate(stream)
+        FSEventStreamRelease(stream)
+        self.stream = nil
     }
 
     private func start(latency: TimeInterval) {

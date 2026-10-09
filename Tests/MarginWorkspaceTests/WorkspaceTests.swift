@@ -62,3 +62,45 @@ import MarginTestSupport
     }
     #expect(found)
 }
+
+@Test func plainFolderListsSymlinksByTheirOwnName() async throws {
+    let base = URL(fileURLWithPath: NSTemporaryDirectory())
+    let dir = base.appendingPathComponent("plain-link-\(UUID().uuidString)")
+    let outside = base.appendingPathComponent("outside-\(UUID().uuidString)")
+    defer {
+        try? FileManager.default.removeItem(at: dir)
+        try? FileManager.default.removeItem(at: outside)
+    }
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+    try "x".write(to: dir.appendingPathComponent("a.py"), atomically: true, encoding: .utf8)
+    let target = outside.appendingPathComponent("target.py")
+    try "y".write(to: target, atomically: true, encoding: .utf8)
+    try FileManager.default.createSymbolicLink(at: dir.appendingPathComponent("link.py"), withDestinationURL: target)
+
+    let workspace = await Workspace.open(dir)
+
+    #expect(!workspace.isGitRepository)
+    #expect(try await workspace.listFiles() == ["a.py", "link.py"])
+}
+
+@Test func watcherEventsFinishAfterStop() async throws {
+    let repo = try await TestRepo(files: ["a.txt": "a\n"])
+    let watcher = FileWatcher(root: repo.root, latency: 0.05)
+    watcher.stop()
+
+    let finished = try await withThrowingTaskGroup(of: Bool.self) { group in
+        group.addTask {
+            for await _ in watcher.events {}
+            return true
+        }
+        group.addTask {
+            try await Task.sleep(for: .seconds(5))
+            return false
+        }
+        let result = try await group.next() ?? false
+        group.cancelAll()
+        return result
+    }
+    #expect(finished)
+}

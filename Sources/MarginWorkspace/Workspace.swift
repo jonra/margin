@@ -24,7 +24,7 @@ public struct Workspace: Sendable {
     private func enumerateFiles() -> [String] {
         guard let enumerator = FileManager.default.enumerator(
             at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else { return [] }
-        let prefixLength = root.path.count + 1
+        let prefix = root.path + "/"
         var result: [String] = []
         for case let url as URL in enumerator {
             let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
@@ -32,7 +32,8 @@ public struct Workspace: Sendable {
                 if Self.skippedDirectories.contains(url.lastPathComponent) { enumerator.skipDescendants() }
                 continue
             }
-            result.append(String(url.path.resolvingRealPath().dropFirst(prefixLength)))
+            guard url.path.hasPrefix(prefix) else { continue }
+            result.append(String(url.path.dropFirst(prefix.count)))
             if result.count >= Self.maxFiles { break }
         }
         return result.sorted()
